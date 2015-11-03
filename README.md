@@ -10,13 +10,13 @@
 ## 利用方法
 
 1. [こちら](https://api.slack.com/web)からファイルを削除したいチームのSlack Web APIのtokenを発行する．
-1. このリポジトリをクローン
-1. 取得したtokenをdeleteFile.jsの2行目へ貼り付け
-1. 必要なパッケージのインストール
+2. このリポジトリをクローン
+3. 取得したtokenをdeleteFile.jsの2行目へ貼り付け
+4. 必要なパッケージのインストール
 ```
 $ npm install
 ```
-1. スクリプトの実行
+5. スクリプトの実行
 ```
 $ node deleteFile
 ```
