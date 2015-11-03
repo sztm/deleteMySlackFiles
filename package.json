@@ -1,0 +1,16 @@
+{
+  "name": "deletemyslackfile",
+  "version": "1.0.0",
+  "description": "",
+  "main": "deleteFile.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "async": "^1.5.0",
+    "bluebird": "^2.10.2",
+    "request": "^2.65.0"
+  }
+}
