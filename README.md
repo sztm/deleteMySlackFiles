@@ -13,13 +13,10 @@
 2. このリポジトリをクローン
 3. 取得したtokenをdeleteFile.jsの2行目へ貼り付け
 4. 必要なパッケージのインストール
-```
-$ npm install
-```
+ ```
+ $ npm install
+ ```
 5. スクリプトの実行
-```
-$ node deleteFile
-```
-
-実行するとSlackにアップロードしたファイルがbackupフォルダへバックアップされます．  
-※Google Driveなどを経由してアップロードされたファイルはダウンロードリンクがないためバックアップされません．
+ ```
+ $ node deleteFile
+ ```

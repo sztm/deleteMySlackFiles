@@ -8,7 +8,7 @@ var Promise = require('bluebird');
 Promise.promisifyAll(request);
 
 /* バックアップ用のディレクトリを作成 */
-makeBackupDir()
+Promise.resolve()
 .then(function(){
     /* 自分のユーザidを取得 */
     return request.postAsync({url: 'https://slack.com/api/auth.test', formData: {token: token}});
@@ -36,7 +36,7 @@ makeBackupDir()
     console.log('start: delete', file_list.length, 'files');
 
     /* ファイルバックアップ */
-    return Promise.reduce(file_list, moveFileToLocal, 0)
+    return Promise.reduce(file_list, deleteFileAsync, 0)
     .then(function(delete_count){
         console.log('finish: delete', delete_count, 'files');
     });
@@ -44,56 +44,6 @@ makeBackupDir()
 .catch(function(err){
     console.error(err);
 });
-
-/* バックアップ用のディレクトリを作成 */
-function makeBackupDir(){
-    return new Promise(function(resolve, reject){
-        fs.mkdir('./backup', 0o755, function(err){
-            if(err && err.code !== 'EEXIST'){
-                reject(err);
-            } else {
-                resolve();
-            }
-        });
-    });
-}
-
-/* ファイルをダウンロードして削除 */
-function moveFileToLocal(count, file){
-    return new Promise(function(resolve){
-        if(file.url_download){
-            downloadFileAsync(file)
-            .then(function(){
-                console.log('download complete:', file.id, file.name);
-                resolve(deleteFileAsync(count, file));
-            }, function(err){
-                console.log('download error:', file.id, file.name);
-                console.error(err);
-                resolve(count);
-            });
-        } else {
-            console.log('no download link:', file.id, file.name);
-            resolve(deleteFileAsync(count, file));
-        }
-    });
-}
-
-
-/* ファイルのダウンロード */
-function downloadFileAsync(file){
-    return new Promise(function(resolve, reject){
-        request.get({url: file.url_download})
-        .pipe(
-            fs.createWriteStream('./backup/' + file.id + '-' + file.name)
-            .on('finish', function(){
-                resolve();
-            })
-            .on('err', function(err){
-                reject(err);
-            })
-        );
-    });
-}
 
 /* 一つのファイルを削除 */
 function deleteFileAsync(count, file){
