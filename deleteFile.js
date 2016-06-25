@@ -1,61 +1,176 @@
-/* Slack API Token */
-var token = '**************';
+'use strict';
 
-var request = require('request');
-var fs = require('fs');
+const token = '**************';
+const delete_mode = [
+    'hosted',
+    'external',
+    'space',
+    'snippet'
+];
+
+const request = require('request');
+const fs = require('fs');
 var Promise = require('bluebird');
 
 Promise.promisifyAll(request);
 
-/* バックアップ用のディレクトリを作成 */
-Promise.resolve()
-.then(function(){
-    /* 自分のユーザidを取得 */
-    return request.postAsync({url: 'https://slack.com/api/auth.test', formData: {token: token}});
+
+/*
+    実行部
+*/
+getMyId()
+.then(getMyFileList)
+.then((files) => {
+    console.log('get', files.length, 'files');
+
+    return Promise.reduce(files, (count, file) => {
+        if(judgeDelete(file.mode)) {
+            /* バックアップ有り */
+            return backupFile(count, file).spread(deleteFile).catch(() => Promise.resolve(count));
+
+            /* バックアップ無し */
+            // return deleteFile(count, file);
+
+            /* バックアップのみ */
+            // return backupFile(count, file).then(() => count).catch(() => Promise.resolve(count));
+        } else {
+            return Promise.resolve(count);
+        }
+    }, 0);
 })
-.spread(function(resp, body){
-    var result = JSON.parse(body);
-    var my_id = result.user_id;
-
-    /* 自分がアップロードしたファイルの一覧を取得 */
-    return request.postAsync({url:'https://slack.com/api/files.list', formData: {
-        token: token,
-        count: 1000, // 1000個のファイル (上限不明)
-        user: my_id,
-        page: 1
-    }});
+.then((delete_count) => {
+    console.log('finish: delete', delete_count, 'files');
 })
-.spread(function(res, body){
-    /* ファイルリストを保存 */
-    fs.writeFile('./files.json', JSON.stringify(JSON.parse(body), null, 4), function(err){
-        if(err){console.log(err);}
-    });
-
-    var file_list = JSON.parse(body).files;
-
-    console.log('start: delete', file_list.length, 'files');
-
-    /* ファイルバックアップ */
-    return Promise.reduce(file_list, deleteFileAsync, 0)
-    .then(function(delete_count){
-        console.log('finish: delete', delete_count, 'files');
-    });
-})
-.catch(function(err){
-    console.error(err);
+.catch((err) => {
+    console.error(err.stack);
 });
 
-/* 一つのファイルを削除 */
-function deleteFileAsync(count, file){
-    // return Promise.resolve(count+1);
-    return request.postAsync({url: 'https://slack.com/api/files.delete', formData: {token: token, file: file.id}})
-    .then(function(){
+
+/*
+    関数部
+*/
+/* 自分のslackのIDを取得 */
+function getMyId() {
+    return new Promise((resolve, reject) => {
+        request.postAsync({
+            url: 'https://slack.com/api/auth.test',
+            formData: {
+                token: token
+            }
+        })
+        .spread((resp, body) => {
+            const my_id = JSON.parse(body).user_id;
+
+            resolve(my_id);
+        })
+        .catch((err) => {
+            reject(err);
+        });
+    });
+}
+
+/* 自分がアップロードしたファイルのリストをAPIで取得 */
+function getMyFileList(my_id) {
+    return new Promise((resolve, reject) => {
+        /* 全てのファイルを取得できていなかったら再帰的に取得する */
+        getFileListByOnePage(my_id, 1)
+        .then((files) => {
+            resolve(files);
+        })
+        .catch((err) => {
+            reject(err);
+        });
+    });
+}
+
+/* 再帰的にAPIから全ファイルのリストを取得する */
+function getFileListByOnePage(my_id, page) {
+    return new Promise((resolve, reject) => {
+        request.postAsync({
+            url: 'https://slack.com/api/files.list',
+            formData: {
+                token: token,
+                count: 1000, // 1000個のファイル (上限不明)
+                user: my_id,
+                page: page
+            }
+        })
+        .spread((resp, body) => {
+            const file_data = JSON.parse(body);
+
+            /* ファイルリストを保存 */
+            fs.writeFile('./files'+page+'.json', JSON.stringify(file_data, null, 4))
+
+            /* 全てのファイルを取得できるまで再帰的に実行 */
+            const paging = file_data.paging;
+            if(paging.pages > paging.page) {
+                getFileListByOnePage(my_id, paging.page+1)
+                .then((next_file_data) => {
+                    resolve(file_data.files.concat(next_file_data));
+                });
+            } else {
+                resolve(file_data.files);
+            }
+        })
+        .catch((err) => {
+            reject(err);
+        });
+    });
+}
+
+/* 削除するファイルのモードを判定 */
+function judgeDelete(file_mode) {
+    return delete_mode.indexOf(file_mode) > -1;
+}
+
+/* 一つのファイルをバックアップする */
+function backupFile(count, file) {
+    const download_link = file.url_private_download;
+
+    return new Promise((resolve, reject) => {
+        /* ダウンロードリンクがあればバックアップ */
+        if(download_link){
+            request.get(download_link, {
+                'auth': {
+                    'bearer': token
+                }
+            })
+            .pipe(
+                fs.createWriteStream('./buckup/' + file.id + '-' + file.name)
+                .on('finish', () => {
+                    console.log('download complete:', file.id, file.name);
+                    resolve([count, file]);
+                })
+                .on('err', (err) => {
+                    console.log('download error:', file.id, file.name);
+                    console.error(err.stack);
+                    reject(err);
+                })
+            );
+        /* ダウンロードリンクが無ければ(GoogleDriveなどからファイルを共有した場合)スルー */
+        } else {
+            console.log('no download link:', file.id, file.name);
+            resolve([count, file]);
+        }
+    });
+}
+
+/* 一つのファイルを削除する */
+function deleteFile(count, file){
+    return request.postAsync({
+        url: 'https://slack.com/api/files.delete',
+        formData: {
+            token: token,
+            file: file.id
+        }
+    })
+    .then(() => {
         console.log('delete complete:', file.id, file.name);
         return Promise.resolve(count + 1);
     })
-    .catch(function(err){
+    .catch((err) => {
         console.log('delete error:', file.id, file.name);
-        console.error(err);
+        console.error(err.stack);
         return Promise.resolve(count);
     });
 }
