@@ -136,7 +136,7 @@ function backupFile(count, file) {
                 }
             })
             .pipe(
-                fs.createWriteStream('./buckup/' + file.id + '-' + file.name)
+                fs.createWriteStream('./backup/' + file.id + '-' + file.name)
                 .on('finish', () => {
                     console.log('download complete:', file.id, file.name);
                     resolve([count, file]);
